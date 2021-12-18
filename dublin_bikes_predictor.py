@@ -284,7 +284,7 @@ def RidgeAlphaValueCrossValidation(X, y):
 def KNeighborsRegressor_k_value_CV(XX, yy):
     mean_error = []
     std_error = []
-    num_neighbours = list(range(1, 100))
+    num_neighbours = list(range(1, 50))
     for k in num_neighbours:
         model = KNeighborsRegressor(n_neighbors=k, weights="uniform")
         scores = cross_val_score(model, XX, yy, cv=10, scoring="neg_mean_squared_error")
@@ -328,7 +328,7 @@ def ridgeRegression(XX, yy, train, test, C_value, time_preds_days, station_id):
     ridgeRegression_model = Ridge(alpha=(1 / (2 * C_value)), fit_intercept=False).fit(
         XX[train], yy[train]
     )
-    print('Ridge Regression Model Parameters')
+    print("Ridge Regression Model Parameters")
     print(ridgeRegression_model.intercept_, ridgeRegression_model.coef_)
     ypred = ridgeRegression_model.predict(XX[test])
 
@@ -338,6 +338,19 @@ def ridgeRegression(XX, yy, train, test, C_value, time_preds_days, station_id):
     # plot_preds(time_preds_days[test], yy[test], time_preds_days[test], ypred, station_id)
 
     return ridgeRegression_model, ridge_metrics_scores
+
+
+def kNearestNeighborsRegression(
+    XX, yy, train, test, num_neighbors_k, time_preds_days, station_id
+):
+    kNR_model = KNeighborsRegressor(n_neighbors=num_neighbors_k, weights="uniform")
+    kNR_model.fit(XX[train], yy[train])
+    ypred = kNR_model.predict(XX[test])
+    ridge_metrics_scores = regression_evaluation_metircs(yy[test], ypred)
+    # print('Plotting y_test vs y_predictions')
+    # plot_preds(time_preds_days[test], yy[test], time_preds_days[test], ypred, station_id)
+
+    return kNR_model, ridge_metrics_scores
 
 
 def exam_2021(df_station, station_id):
@@ -409,20 +422,33 @@ def exam_2021(df_station, station_id):
             "Please enter the number of neighnours 'k' value for the KNeighborsRegressor model:    "
         )
     )
-    # -----------------------------------------Ridge Regression---------------------------------------
+
+    # -----------------------------------------Predicting available bikes using Ridge and KNeigborsRegressor---------------------------------------
 
     train, test = train_test_split(np.arange(0, yy.size), test_size=0.2)
-
+    # -----------------------------------------Ridge Regression---------------------------------------
     model_ridgeReg, scores_ridgeReg = ridgeRegression(
         XX, yy, train, test, C_value_ridge, time_preds_days, station_id
     )
     ypred_full_ridge = model_ridgeReg.predict(XX)
+
     print("Plotting Ridge Regression Predictions")
-    # plot_preds(time_preds_days, yy, time_preds_days, y_pred, station_id)
     plot_preds(
         time_full_days, y_available_bikes, time_preds_days, ypred_full_ridge, station_id
     )
     print(scores_ridgeReg)
+
+    # -----------------------------------------KNeigborsRegressor---------------------------------------
+    model_kNR, scores_kNR = kNearestNeighborsRegression(
+        XX, yy, train, test, k_value, time_preds_days, station_id
+    )
+    ypred_full_ridge = model_kNR.predict(XX)
+
+    print("Plotting Ridge Regression Predictions")
+    plot_preds(
+        time_full_days, y_available_bikes, time_preds_days, ypred_full_ridge, station_id
+    )
+    print(scores_kNR)
 
 
 def main():
