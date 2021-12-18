@@ -9,6 +9,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
+from sklearn.dummy import DummyRegressor
 
 DATASET_PATH = "Data/dublinbikes_20200101_20200401.csv"
 SELECTED_STATIONS = [19, 10, 96]
@@ -353,6 +354,35 @@ def kNearestNeighborsRegression(
     return kNR_model, ridge_metrics_scores
 
 
+def returnSameDataPoint(yy):
+    return yy
+
+
+# Baseline model to predict same point as the last
+def baselineModel(
+    XX, yy, test, time_preds_days, station_id, time_full_days, y_available_bikes
+):
+    y_pred_test = []
+    ytest = yy[test]
+    for index, y_available_bike in enumerate(ytest):
+        if index > 0:
+            y_pred = returnSameDataPoint(ytest[index - 1])
+            y_pred_test.append(y_pred)
+        else:
+            y_pred_test.append(0)
+    y_pred_test = np.array(y_pred_test)
+    baseline_metrics_scores = regression_evaluation_metircs(yy[test], y_pred_test)
+
+    print("Plotting Baseline Regression Predictions")
+    plot_preds(
+        time_full_days,
+        y_available_bikes,
+        time_preds_days[test],
+        y_pred_test,
+        station_id,
+    )
+
+
 def exam_2021(df_station, station_id):
     # converting timestamp to unix timestamp in seconds
     time_full_seconds = (
@@ -428,7 +458,7 @@ def exam_2021(df_station, station_id):
     train, test = train_test_split(np.arange(0, yy.size), test_size=0.2)
     # -----------------------------------------Ridge Regression---------------------------------------
     model_ridgeReg, scores_ridgeReg = ridgeRegression(
-        XX, yy, train, test, C_value_ridge, time_preds_days, station_id
+        XX_polynomial, yy, train, test, C_value_ridge, time_preds_days, station_id
     )
     ypred_full_ridge = model_ridgeReg.predict(XX)
 
@@ -440,15 +470,26 @@ def exam_2021(df_station, station_id):
 
     # -----------------------------------------KNeigborsRegressor---------------------------------------
     model_kNR, scores_kNR = kNearestNeighborsRegression(
-        XX, yy, train, test, k_value, time_preds_days, station_id
+        XX_polynomial, yy, train, test, k_value, time_preds_days, station_id
     )
-    ypred_full_ridge = model_kNR.predict(XX)
+    ypred_full_kNR = model_kNR.predict(XX)
 
     print("Plotting Ridge Regression Predictions")
     plot_preds(
-        time_full_days, y_available_bikes, time_preds_days, ypred_full_ridge, station_id
+        time_full_days, y_available_bikes, time_preds_days, ypred_full_kNR, station_id
     )
     print(scores_kNR)
+
+    # ----------------------------------------------Baseline-------------------------------------------------
+    baselineModel(
+        XX_polynomial,
+        yy,
+        test,
+        time_preds_days,
+        station_id,
+        time_full_days,
+        y_available_bikes,
+    )
 
 
 def main():
@@ -471,8 +512,6 @@ if __name__ == "__main__":
 # selecting lag cross validation i.e how many points before
 
 # Train models using cross validation -> did not go well for Ridge
-
-
 # Dummy Model -> predicting same point as the last is better idea
 
 
