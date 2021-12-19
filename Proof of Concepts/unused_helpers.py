@@ -1,11 +1,49 @@
 
+from sklearn.neighbors import KNeighborsRegressor
+
+# ___________________________Lag cross validation _________________________________________________________
+
+def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interval_dt):
+    mean_error = []; std_error = []
+    lag_range = list(range(1, 10))
+    
+    test_model_ridge = Ridge(fit_intercept=False); test_model_kNNR = KNeighborsRegressor(n_neighbors=100)
+    models = [test_model_ridge, test_model_kNNR]
+
+    step_size = [2,6,12]
+    for model in models:
+        for q_value in step_size:
+            mean_error = []; std_error = []
+            for lag_value in lag_range:
+                XX_test, yy_test, time_preds_days = feature_engineering(
+                    q_step_size= q_value,
+                    lag= lag_value,
+                    stride=1,
+                    y_available_bikes=y_available_bikes,
+                    time_full_days=time_full_days,
+                    time_sampling_interval_dt=time_sampling_interval_dt,
+                    weekly_features_flag=True,
+                    daily_features_flag=True,
+                    short_term_features_flag=True,
+                )
+                scores = cross_val_score(model, XX_test, yy_test, cv=10, scoring="neg_mean_squared_error")
+                mean_error.append(np.array(scores).mean())
+                std_error.append(np.array(scores).std())
+            plt.rc("font", size=18)
+            plt.rcParams["figure.constrained_layout.use"] = True
+            plt.errorbar(lag_range, mean_error, yerr=std_error, linewidth=3)
+            plt.xlabel("lag")
+            plt.ylabel("negative mean squared error")
+            plt.title(f"Lag Cross Validation Results,{q_value*(time_sampling_interval_dt/60)} minutes ahead Preidctions")
+            plt.show()
+
 # ___________________________Training Ridge Regression using k fold cross validation _________________________________________________________
 from matplotlib import pyplot as plt
 import numpy as np
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import KFold
-from dublin_bikes_predictor import KNeighborsRegressor_k_value_CV, regression_evaluation_metircs
+from sklearn.model_selection import KFold, cross_val_score
+from dublin_bikes_predictor import KNeighborsRegressor_k_value_CV, feature_engineering, regression_evaluation_metircs
 
 
 def ridgeRegression(XX, yy, train, test, C_value, time_preds_days, station_id ):

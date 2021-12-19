@@ -38,7 +38,7 @@ def plot_preds(time_full_days, y_available_bikes, time_preds_days, y_pred, stati
     plt.show()
 
 
-def predidct_available_bikes_seasonality(
+def predict_available_bikes_seasonality(
     model,
     q_step_ahead,
     seasonality,
@@ -105,14 +105,13 @@ def predidct_available_bikes_seasonality(
 
 
 def test_various_seasonaliy_preds(
-    test_model, y_available_bikes, time_full_days, time_sampling_interval_dt, station_id
+    test_model, y_available_bikes, time_full_days, time_sampling_interval_dt, station_id, print_flag 
 ):
     plot = True
-    print_flag = True
     # prediction using short-term trend
-    predidct_available_bikes_seasonality(
+    predict_available_bikes_seasonality(
         model=test_model,
-        q_step_ahead=10,
+        q_step_ahead=2,
         seasonality=1,
         lag=3,
         y_available_bikes=y_available_bikes,
@@ -128,7 +127,7 @@ def test_various_seasonaliy_preds(
     d = math.floor(
         24 * 60 * 60 / time_sampling_interval_dt
     )  # number of samples per day
-    predidct_available_bikes_seasonality(
+    predict_available_bikes_seasonality(
         model=test_model,
         q_step_ahead=2,
         seasonality=d,
@@ -145,8 +144,8 @@ def test_various_seasonaliy_preds(
     # prediction using weekly seasonality
     w = math.floor(
         7 * 24 * 60 * 60 / time_sampling_interval_dt
-    )  # number of samples per day
-    predidct_available_bikes_seasonality(
+    )  # number of samples per week
+    predict_available_bikes_seasonality(
         model=test_model,
         q_step_ahead=2,
         seasonality=w,
@@ -234,6 +233,51 @@ def feature_engineering(
     )
 
 
+def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interval_dt, station_id):
+    mean_error = []; std_error = []
+    lag_range = list(range(1, 4))
+    
+    test_model_ridge = Ridge(fit_intercept=False); test_model_kNNR = KNeighborsRegressor(n_neighbors=100)
+    models = [test_model_ridge, test_model_kNNR]
+    step_size = [2,6,12]
+
+    for model in models:
+        print(model)
+        for q_value in step_size:
+            print(f'Step size is {q_value}')
+            mean_error = []; std_error = []
+            for lag_value in lag_range:
+                XX_test, yy_test, time_preds_days = feature_engineering(
+                    q_step_size= q_value,
+                    lag= lag_value,
+                    stride=1,
+                    y_available_bikes=y_available_bikes,
+                    time_full_days=time_full_days,
+                    time_sampling_interval_dt=time_sampling_interval_dt,
+                    weekly_features_flag=True,
+                    daily_features_flag=True,
+                    short_term_features_flag=True,
+                )
+                temp = []
+                kf = KFold(n_splits=10)
+                for train, test in kf.split(XX_test):
+                    model.fit(XX_test[train], yy_test[train])
+                    ypred = model.predict(XX_test[test])
+                    temp.append(mean_squared_error(yy_test[test], ypred))
+                # plot_preds(time_full_days, y_available_bikes, time_preds_days,  model.predict(XX_test), station_id)
+                mean_error.append(np.array(temp).mean())
+                std_error.append(np.array(temp).std())
+            plt.rc("font", size=18)
+            plt.rcParams["figure.constrained_layout.use"] = True
+            plt.errorbar(lag_range, mean_error, yerr=std_error, linewidth=3)
+            plt.xlabel("lag")
+            plt.ylabel("negative mean squared error")
+            plt.title(f"Lag Cross Validation Results,{q_value*(time_sampling_interval_dt/60)} minutes ahead Preidctions")
+            plt.show()
+
+def featureImportance():
+    pass
+
 def PolynomialOrderCrossValidation(XX, yy):
     kf = KFold(n_splits=10)
     mean_error = []
@@ -261,7 +305,7 @@ def PolynomialOrderCrossValidation(XX, yy):
 def RidgeAlphaValueCrossValidation(X, y):
     mean_error = []
     std_error = []
-    C_range = [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000, 5000]
+    C_range = [0.00001, 0.00005,  0.0001,  0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50]
     for C in C_range:
         ridge_model = Ridge(alpha=1 / (2 * C))
         temp = []
@@ -411,18 +455,30 @@ def exam_2021(df_station, station_id):
         time_full_days,
         time_sampling_interval_dt,
         station_id,
+        True
     )
+
+    test_model_kNN = KNeighborsRegressor(n_neighbors=100)
+    test_various_seasonaliy_preds(
+        test_model_kNN,
+        y_available_bikes,
+        time_full_days,
+        time_sampling_interval_dt,
+        station_id,
+        False
+    )
+
 
     XX, yy, time_preds_days = feature_engineering(
         q_step_size=2,
-        lag=3,
+        lag=2,
         stride=1,
         y_available_bikes=y_available_bikes,
         time_full_days=time_full_days,
         time_sampling_interval_dt=time_sampling_interval_dt,
         weekly_features_flag=True,
         daily_features_flag=True,
-        short_term_features_flag=False,
+        short_term_features_flag=True,
     )
 
     # -----------------------------------------Cross Validation---------------------------------------
@@ -510,9 +566,7 @@ if __name__ == "__main__":
 # TODO:
 # do model features mean square error -> ss/ ss+d/ ss+w/ d/ d+w/ w
 # selecting lag cross validation i.e how many points before
-
 # Train models using cross validation -> did not go well for Ridge
-# Dummy Model -> predicting same point as the last is better idea
 
 
 # NOTE:
