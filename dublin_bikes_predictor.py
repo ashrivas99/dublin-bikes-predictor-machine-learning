@@ -8,8 +8,9 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsRegressor
-from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures
+from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures, StandardScaler
 from sklearn.dummy import DummyRegressor
+from sklearn.linear_model import RidgeCV
 
 DATASET_PATH = "Data/dublinbikes_20200101_20200401.csv"
 SELECTED_STATIONS = [19, 10, 96]
@@ -176,15 +177,15 @@ def feature_engineering(
     # number of samples per week
     num_samples_per_week = math.floor(7 * 24 * 60 * 60 / time_sampling_interval_dt)
 
-    len = (
-        y_available_bikes.size
-        - num_samples_per_week
-        - lag * num_samples_per_week
-        - q_step_size
-    )
-    XX_input_features = y_available_bikes[q_step_size : q_step_size + len : stride]
+    if weekly_features_flag == True and daily_features_flag == True and short_term_features_flag == True:
+        len = (
+            y_available_bikes.size
+            - num_samples_per_week
+            - lag * num_samples_per_week
+            - q_step_size
+        )
+        XX_input_features = y_available_bikes[q_step_size : q_step_size + len : stride]
 
-    if weekly_features_flag:
         for i in range(1, lag):
             X = y_available_bikes[
                 i * num_samples_per_week
@@ -194,7 +195,6 @@ def feature_engineering(
             ]
             XX_input_features = np.column_stack((XX_input_features, X))
 
-    if daily_features_flag:
         for i in range(0, lag):
             X = y_available_bikes[
                 i * num_samples_per_day
@@ -204,38 +204,121 @@ def feature_engineering(
             ]
             XX_input_features = np.column_stack((XX_input_features, X))
 
-    if short_term_features_flag:
         for i in range(0, lag):
             X = y_available_bikes[i : i + len : stride]
             XX_input_features = np.column_stack((XX_input_features, X))
 
-    yy_outputs_available_bikes = y_available_bikes[
-        lag * num_samples_per_week
-        + num_samples_per_week
-        + q_step_size : lag * num_samples_per_week
-        + num_samples_per_week
-        + q_step_size
-        + len : stride
-    ]
-    time_for_each_prediction_in_days = time_full_days[
-        lag * num_samples_per_week
-        + num_samples_per_week
-        + q_step_size : lag * num_samples_per_week
-        + num_samples_per_week
-        + q_step_size
-        + len : stride
-    ]
+        yy_outputs_available_bikes = y_available_bikes[
+            lag * num_samples_per_week
+            + num_samples_per_week
+            + q_step_size : lag * num_samples_per_week
+            + num_samples_per_week
+            + q_step_size
+            + len : stride
+        ]
+        time_for_each_prediction_in_days = time_full_days[
+            lag * num_samples_per_week
+            + num_samples_per_week
+            + q_step_size : lag * num_samples_per_week
+            + num_samples_per_week
+            + q_step_size
+            + len : stride
+        ]
 
-    return (
-        XX_input_features,
-        yy_outputs_available_bikes,
-        time_for_each_prediction_in_days,
-    )
+        return (
+            XX_input_features,
+            yy_outputs_available_bikes,
+            time_for_each_prediction_in_days,
+        )
+
+    elif weekly_features_flag == False and daily_features_flag == True and short_term_features_flag == True:
+        len = (
+            y_available_bikes.size
+            - num_samples_per_day
+            - lag * num_samples_per_day
+            - q_step_size
+        )
+        XX_input_features = y_available_bikes[q_step_size : q_step_size + len : stride]
+        for i in range(1, lag):
+            X = y_available_bikes[
+                i * num_samples_per_day
+                + q_step_size : i * num_samples_per_day
+                + q_step_size
+                + len : stride
+            ]
+            XX_input_features = np.column_stack((XX_input_features, X))
+
+        for i in range(0, lag):
+            X = y_available_bikes[i : i + len : stride]
+            XX_input_features = np.column_stack((XX_input_features, X))
+
+        yy_outputs_available_bikes = y_available_bikes[
+            lag * num_samples_per_day
+            + num_samples_per_day
+            + q_step_size : lag * num_samples_per_day
+            + num_samples_per_day
+            + q_step_size
+            + len : stride
+        ]
+        time_for_each_prediction_in_days = time_full_days[
+            lag * num_samples_per_day
+            + num_samples_per_day
+            + q_step_size : lag * num_samples_per_day
+            + num_samples_per_day
+            + q_step_size
+            + len : stride
+        ]
+
+        return (
+            XX_input_features,
+            yy_outputs_available_bikes,
+            time_for_each_prediction_in_days,
+        )
+
+    elif weekly_features_flag == False and daily_features_flag == False and short_term_features_flag == True:
+        len = (
+            y_available_bikes.size
+            - 1
+            - lag * 1
+            - q_step_size
+        )
+        XX_input_features = y_available_bikes[q_step_size : q_step_size + len : stride]
+
+        for i in range(1, lag):
+            X = y_available_bikes[i : i + len : stride]
+            XX_input_features = np.column_stack((XX_input_features, X))
+
+        yy_outputs_available_bikes = y_available_bikes[
+            lag * 1
+            + 1
+            + q_step_size : lag * 1
+            + 1
+            + q_step_size
+            + len : stride
+        ]
+        time_for_each_prediction_in_days = time_full_days[
+            lag * 1
+            + 1
+            + q_step_size : lag * 1
+            + 1
+            + q_step_size
+            + len : stride
+        ]
+
+        return (
+            XX_input_features,
+            yy_outputs_available_bikes,
+            time_for_each_prediction_in_days,
+        )
+
+    else:
+        print('Please check flags')
+
 
 
 def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interval_dt, station_id):
     mean_error = []; std_error = []
-    lag_range = list(range(1, 4))
+    lag_range = list(range(2, 50))
     
     test_model_ridge = Ridge(fit_intercept=False); test_model_kNNR = KNeighborsRegressor(n_neighbors=100)
     models = [test_model_ridge, test_model_kNNR]
@@ -254,8 +337,8 @@ def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interva
                     y_available_bikes=y_available_bikes,
                     time_full_days=time_full_days,
                     time_sampling_interval_dt=time_sampling_interval_dt,
-                    weekly_features_flag=True,
-                    daily_features_flag=True,
+                    weekly_features_flag=False,
+                    daily_features_flag=False,
                     short_term_features_flag=True,
                 )
                 temp = []
@@ -276,6 +359,7 @@ def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interva
             plt.show()
 
 def featureImportance():
+    # Perform ridge regression and plot model param weights as feature importance
     pass
 
 def PolynomialOrderCrossValidation(XX, yy):
@@ -408,7 +492,7 @@ def baselineModel(
 ):
     y_pred_test = []
     ytest = yy[test]
-    for index, y_available_bike in enumerate(ytest):
+    for index, y in enumerate(ytest):
         if index > 0:
             y_pred = returnSameDataPoint(ytest[index - 1])
             y_pred_test.append(y_pred)
@@ -470,19 +554,24 @@ def exam_2021(df_station, station_id):
 
 
     XX, yy, time_preds_days = feature_engineering(
-        q_step_size=2,
-        lag=2,
+        q_step_size=10,
+        lag=1,
         stride=1,
         y_available_bikes=y_available_bikes,
         time_full_days=time_full_days,
         time_sampling_interval_dt=time_sampling_interval_dt,
-        weekly_features_flag=True,
-        daily_features_flag=True,
+        weekly_features_flag=False,
+        daily_features_flag=False,
         short_term_features_flag=True,
     )
 
+    XX_columns = ['2 weeks ago','1 weeks ago','2 days ago','1 day ago','2 points before','1 point before']
+    # XX_columns_lag_3 = ['3 weeks ago','2 weeks ago', '1 week ago','3 days ago','2 days ago', '1 day ago', '3 points before',
+    # '2 points before','1 point before']
+    XX_columns_lag_3 = [ '3 days ago','2 days ago', '1 day ago', '3 points before','2 points before','1 point before']
+
     # -----------------------------------------Cross Validation---------------------------------------
-    scaler = MinMaxScaler()
+    scaler = StandardScaler()
     XX_scaled = scaler.fit_transform(XX)
 
     # Polynomial Order Cross Validation for Ridge Regression
@@ -497,10 +586,23 @@ def exam_2021(df_station, station_id):
             XX_scaled
         )
 
-    RidgeAlphaValueCrossValidation(XX_polynomial, yy)
-    C_value_ridge = int(
-        input("Please choose the desired 'C' value for the Ridge Regression model:    ")
-    )
+    reg = RidgeCV()
+    reg.fit(XX_scaled,yy)
+    mdl = Ridge( alpha = 10.000000).fit(XX_scaled, yy)
+    print("Best alpha using built-in RidgeCV: %f" % reg.alpha_)
+    print("Best score using built-in RidgeCV: %f" %reg.score(XX_scaled,yy))
+    coef = pd.Series(reg.coef_, index = XX_columns_lag_3)
+    print("Lasso picked " + str(sum(coef != 0)) + " variables and eliminated the other " +  str(sum(coef == 0)) + " variables")
+    imp_coef = coef.sort_values()
+    import matplotlib
+    matplotlib.rcParams['figure.figsize'] = (8.0, 10.0)
+    imp_coef.plot(kind = "barh")
+    plt.title("Feature importance using Lasso Model")
+    plt.show()
+
+
+    RidgeAlphaValueCrossValidation(XX_scaled, yy)
+    C_value_ridge = float(input("Please choose the desired 'C' value for the Ridge Regression model:    "))
 
     KNeighborsRegressor_k_value_CV(XX, yy)
     k_value = int(
@@ -514,7 +616,7 @@ def exam_2021(df_station, station_id):
     train, test = train_test_split(np.arange(0, yy.size), test_size=0.2)
     # -----------------------------------------Ridge Regression---------------------------------------
     model_ridgeReg, scores_ridgeReg = ridgeRegression(
-        XX_polynomial, yy, train, test, C_value_ridge, time_preds_days, station_id
+        XX_polynomial, yy, train, test, 0.05, time_preds_days, station_id
     )
     ypred_full_ridge = model_ridgeReg.predict(XX)
 

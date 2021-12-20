@@ -58,8 +58,23 @@ def regression_results(y_true, y_pred):
 
 def exam_2021(df_station, station_id):
 
+    start_date=pd.to_datetime("29-01-2020",format='%d-%m-%Y')
+    df_station = df_station[df_station.TIME>start_date]
+
     df_station = df_station.set_index('TIME')
     available_bikes_df = df_station[['AVAILABLE BIKES']]
+    available_bikes_df = available_bikes_df.dropna()
+
+    available_bikes_df.loc[:,'1_point_before'] = available_bikes_df.loc[:,'AVAILABLE BIKES'].shift()
+    available_bikes_df.loc[:,'1_point_before_Diff'] = available_bikes_df.loc[:,'1_point_before'].diff()
+    available_bikes_df = available_bikes_df.dropna()
+
+    available_bikes_df.loc[:,'2_point_before'] = available_bikes_df.loc[:,'AVAILABLE BIKES'].shift(2)
+    available_bikes_df.loc[:,'2_point_before_Diff'] = available_bikes_df.loc[:,'2_point_before'].diff()
+    available_bikes_df = available_bikes_df.dropna()
+
+    available_bikes_df.loc[:,'3_point_before'] = available_bikes_df.loc[:,'AVAILABLE BIKES'].shift(3)
+    available_bikes_df.loc[:,'3_point_before_Diff'] = available_bikes_df.loc[:,'2_point_before'].diff()
     available_bikes_df = available_bikes_df.dropna()
 
     # inserting new column with yesterday's consumption values
@@ -129,7 +144,7 @@ def exam_2021(df_station, station_id):
     # creating copy of original dataframe
     available_bikes_df_2o = available_bikes_df.copy()
     # inserting column with yesterday-1 values
-    available_bikes_df_2o['Bikes_Yesterday-1'] = available_bikes_df_2o['Bikes_Yesterday'].shift()
+    available_bikes_df_2o['Bikes_Yesterday-1'] = available_bikes_df_2o['Bikes_Yesterday'].shift(288)
     # inserting column with difference in yesterday-1 and yesterday-2 values.
     available_bikes_df_2o['Bikes_Yesterday-1_Diff'] = available_bikes_df_2o['Bikes_Yesterday-1'].diff()
     # dropping NAs
@@ -164,7 +179,7 @@ def exam_2021(df_station, station_id):
     plt.show()
 
     available_bikes_df_weekly = available_bikes_df_2o.copy() 
-    available_bikes_df_weekly['Last_Week'] = available_bikes_df_weekly['AVAILABLE BIKES'].shift(7)
+    available_bikes_df_weekly['Last_Week'] = available_bikes_df_weekly['AVAILABLE BIKES'].shift(2016)
     available_bikes_df_weekly = available_bikes_df_weekly.dropna()
 
     X_train_weekly = available_bikes_df_weekly[:'2020-01'].drop(['AVAILABLE BIKES'], axis = 1)
