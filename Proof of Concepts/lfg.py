@@ -9,7 +9,7 @@ from sklearn import metrics
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, Ridge, RidgeCV
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVR
@@ -65,10 +65,10 @@ def regression_evaluation_metircs(ytest, ypred):
     return scores_dict
 
 
-def feature_engineering(
+def feature_engineering1(
     df_station,
     lag,
-    q_step_size,
+    q_step_sizeez,
     time_sampling_interval_dt,
     short_term_features_flag,
     daily_features_flag,
@@ -80,7 +80,7 @@ def feature_engineering(
 
     time_sampling_interval_dt_mins = time_sampling_interval_dt / 60
     # Setting outputs y for step ahead predictions
-    for step_size in q_step_size:
+    for step_size in q_step_sizeez:
         q = step_size * time_sampling_interval_dt_mins
         available_bikes_df.loc[
             :, f"bikes_avail_{q}_mins_ahead"
@@ -114,14 +114,70 @@ def feature_engineering(
                 num_samples_per_week * (week + 1)
             )
 
-    available_bikes_df = available_bikes_df.dropna()
-    return available_bikes_df
+    time_series_features_10_min_ahead_preds = available_bikes_df.copy()
+    time_series_features_10_min_ahead_preds = time_series_features_10_min_ahead_preds.drop(
+        ['AVAILABLE BIKES','bikes_avail_30.0_mins_ahead', 'bikes_avail_60.0_mins_ahead'], axis=1
+    )
 
+    time_series_features_30_min_ahead_preds = available_bikes_df.copy()
+    time_series_features_30_min_ahead_preds = time_series_features_30_min_ahead_preds.drop(
+        ['AVAILABLE BIKES','bikes_avail_10.0_mins_ahead', 'bikes_avail_60.0_mins_ahead'], axis=1
+    )
+
+    time_series_features_1hr_ahead_preds = available_bikes_df.copy()
+    time_series_features_1hr_ahead_preds = time_series_features_1hr_ahead_preds.drop(
+        ['AVAILABLE BIKES','bikes_avail_10.0_mins_ahead', 'bikes_avail_30.0_mins_ahead'], axis=1
+    )
+
+    time_series_features_10_min_ahead_preds = time_series_features_10_min_ahead_preds.dropna()
+    time_series_features_30_min_ahead_preds = time_series_features_30_min_ahead_preds.dropna()
+    time_series_features_1hr_ahead_preds = time_series_features_1hr_ahead_preds.dropna()
+    available_bikes_df = available_bikes_df.dropna()
+
+    return time_series_features_10_min_ahead_preds, time_series_features_30_min_ahead_preds, time_series_features_1hr_ahead_preds
+
+def lagCrossValidation( df_station, q_step_size, time_sampling_interval_dt, station_id):
+    mean_error = []; std_error = []
+    lag_range = list(range(2, 50))
+    test_model_ridge = Ridge(fit_intercept=False); test_model_kNNR = KNeighborsRegressor()
+
+    models = [test_model_ridge, test_model_kNNR]
+    for model in models:
+        for lag_value in lag_range:
+            df_10_min_ahead_preds, df_30_min_ahead_preds, df_1hr_ahead_preds = feature_engineering(
+            df_station=df_station,
+            lag=lag_value,
+            q_step_size=q_step_size,
+            time_sampling_interval_dt=time_sampling_interval_dt,
+            short_term_features_flag=True,
+            daily_features_flag=True,
+            weekly_features_flag=True,
+        )
+
+
+
+            temp = []
+            kf = KFold(n_splits=10)
+            for train, test in kf.split(XX_test):
+                model.fit(XX_test[train], yy_test[train])
+                ypred = model.predict(XX_test[test])
+                temp.append(mean_squared_error(yy_test[test], ypred))
+            # plot_preds(time_full_days, y_available_bikes, time_preds_days,  model.predict(XX_test), station_id)
+            mean_error.append(np.array(temp).mean())
+            std_error.append(np.array(temp).std())
+        plt.rc("font", size=18)
+        plt.rcParams["figure.constrained_layout.use"] = True
+        plt.errorbar(lag_range, mean_error, yerr=std_error, linewidth=3)
+        plt.xlabel("lag")
+        plt.ylabel("negative mean squared error")
+        plt.title(f"Lag Cross Validation Results,{q_value*(time_sampling_interval_dt/60)} minutes ahead Preidctions")
+        plt.show()
 
 def exam_2021(df_station, station_id):
     start_date = pd.to_datetime("29-01-2020", format="%d-%m-%Y")
     df_station = df_station[df_station.TIME > start_date]
 
+    # Finding the time interval between each measurement
     time_full_seconds = (
         pd.array(pd.DatetimeIndex(df_station.iloc[:, 1]).astype(np.int64)) / 1000000000
     )
@@ -131,109 +187,78 @@ def exam_2021(df_station, station_id):
         f"data sampling interval is {time_sampling_interval_dt} secs or {time_sampling_interval_dt/60} minutes"
     )
 
+    # Extracting all data for available bikes into df_total_station_data
     df_station = df_station.set_index("TIME")
+    df_total_station_data = df_station[["AVAILABLE BIKES"]]
+    df_total_station_data = df_total_station_data.dropna()
 
+    # Plotting avaliable bikes vs time of our dataset
+    plot_station_data(
+        df_total_station_data.index, df_total_station_data["AVAILABLE BIKES"], 19
+    )
+
+    # Setting the step sizes
     step_size_10_min_ahead_preds = 2
     step_size_30_min_ahead_preds = 6
     step_size_1_hr_ahead_preds = 12
-    q_step_size = [
-        step_size_10_min_ahead_preds,
-        step_size_30_min_ahead_preds,
-        step_size_1_hr_ahead_preds,
+    q_step_sizeez = [
+        2,
+        6,
+        12
     ]
 
-    time_series_features_df = feature_engineering(
+    # Calculating features for step ahead predictions and extracting these features into seperate dataframes
+    df_10_min_ahead_preds, df_30_min_ahead_preds, df_1hr_ahead_preds = feature_engineering1(
         df_station=df_station,
         lag=3,
-        q_step_size=q_step_size,
+        q_step_sizeez=q_step_sizeez,
         time_sampling_interval_dt=time_sampling_interval_dt,
         short_term_features_flag=True,
         daily_features_flag=True,
         weekly_features_flag=True,
     )
 
-    available_bikes_df = df_station[["AVAILABLE BIKES"]]
-    available_bikes_df = available_bikes_df.dropna()
 
-    available_bikes_df1 = df_station[["AVAILABLE BIKES"]]
-    available_bikes_df1 = available_bikes_df1.dropna()
+    # Setting up Hold Out train and test data for predicting available bikes 10 minutes ahead
+    train_indices_df_10_min = 0.70 * df_10_min_ahead_preds.shape[0]
+    XX_10_min = df_10_min_ahead_preds.drop(["bikes_avail_10.0_mins_ahead"], axis=1)
+    
+    X_train_10_min = df_10_min_ahead_preds[: int(train_indices_df_10_min)].drop(["bikes_avail_10.0_mins_ahead"], axis=1)
+    y_train_10_min = df_10_min_ahead_preds[: int(train_indices_df_10_min)]
+    y_train_10_min = y_train_10_min[["bikes_avail_10.0_mins_ahead"]]
 
-    plot_station_data(
-        available_bikes_df.index, available_bikes_df["AVAILABLE BIKES"], 19
-    )
+    X_test_10_min = df_10_min_ahead_preds[int(train_indices_df_10_min) :].drop(["bikes_avail_10.0_mins_ahead"], axis=1)
+    y_test_10_min = df_10_min_ahead_preds[int(train_indices_df_10_min) :]
+    y_test_10_min = y_test_10_min[["bikes_avail_10.0_mins_ahead"]]
 
-    train_indices = 0.70 * available_bikes_df.shape[0]
 
-    XX = available_bikes_df.drop(["AVAILABLE BIKES"], axis=1)
-    X_train = available_bikes_df[: int(train_indices)].drop(["AVAILABLE BIKES"], axis=1)
-    X_test = available_bikes_df[int(train_indices) :].drop(["AVAILABLE BIKES"], axis=1)
-    y_train = available_bikes_df[: int(train_indices)]
-    y_train = y_train[["AVAILABLE BIKES"]]
-    y_test = available_bikes_df[int(train_indices) :]
-    y_test = y_test[["AVAILABLE BIKES"]]
+    # Setting up Hold Out train and test data for predicting available bikes 30 minutes ahead
+    train_indices_df_30_min = 0.70 * df_30_min_ahead_preds.shape[0]
+    XX_30_min = df_30_min_ahead_preds.drop(["bikes_avail_30.0_mins_ahead"], axis=1)
+    
+    X_train_30_min = df_30_min_ahead_preds[: int(train_indices_df_30_min)].drop(["bikes_avail_30.0_mins_ahead"], axis=1)
+    y_train_30_min = df_30_min_ahead_preds[: int(train_indices_df_30_min)]
+    y_train_30_min = y_train_30_min[["bikes_avail_30.0_mins_ahead"]]
 
-    from sklearn.model_selection import TimeSeriesSplit
+    X_test_30_min = df_30_min_ahead_preds[int(train_indices_df_30_min) :].drop(["bikes_avail_30.0_mins_ahead"], axis=1)
+    y_test_30_min = df_30_min_ahead_preds[int(train_indices_df_30_min) :]
+    y_test_30_min = y_test_30_min[["bikes_avail_30.0_mins_ahead"]]
 
-    # Spot Check Algorithms
-    models = []
-    models.append(("LR", Ridge(fit_intercept=True)))
-    models.append(("KNN", KNeighborsRegressor()))
-    models.append(
-        ("RF", RandomForestRegressor(n_estimators=10))
-    )  # Ensemble method - collection of many decision trees
-    # Evaluate each model in turn
-    results = []
-    names = []
-    for name, model in models:
-        # TimeSeries Cross validation
-        tscv = TimeSeriesSplit(n_splits=10)
-        cv_results = cross_val_score(model, X_train, y_train, cv=tscv, scoring="r2")
-        results.append(cv_results)
-        names.append(name)
-        print("%s: %f (%f)" % (name, cv_results.mean(), cv_results.std()))
 
-    # Compare Algorithms
-    plt.boxplot(results, labels=names)
-    plt.title("Algorithm Comparison")
-    plt.show()
+    # Setting up Hold Out train and test data for predicting available bikes 1 hour ahead
+    train_indices_df_1hr = 0.70 * df_1hr_ahead_preds.shape[0]
+    XX_1hr = df_1hr_ahead_preds.drop(["bikes_avail_60.0_mins_ahead"], axis=1)
+    
+    X_train_1hr = df_1hr_ahead_preds[: int(train_indices_df_1hr)].drop(["bikes_avail_60.0_mins_ahead"], axis=1)
+    y_train_1hr = df_1hr_ahead_preds[: int(train_indices_df_1hr)]
+    y_train_1hr = y_train_1hr[["bikes_avail_60.0_mins_ahead"]]
 
-    from sklearn.metrics import make_scorer
+    X_test_1hr = df_1hr_ahead_preds[int(train_indices_df_1hr) :].drop(["bikes_avail_60.0_mins_ahead"], axis=1)
+    y_test_1hr = df_1hr_ahead_preds[int(train_indices_df_1hr) :]
+    y_test_1hr = y_test_1hr[["bikes_avail_60.0_mins_ahead"]]
 
-    def rmse(actual, predict):
-        predict = np.array(predict)
-        actual = np.array(actual)
-        distance = predict - actual
-        square_distance = distance ** 2
-        mean_square_distance = square_distance.mean()
-        score = np.sqrt(mean_square_distance)
-        return score
 
-    rmse_score = make_scorer(rmse, greater_is_better=False)
-    from sklearn.model_selection import GridSearchCV
 
-    model = RandomForestRegressor()
-    param_search = {
-        "n_estimators": [20, 50, 100],
-        "max_features": ["auto", "sqrt", "log2"],
-        "max_depth": [i for i in range(5, 15)],
-    }
-    tscv = TimeSeriesSplit(n_splits=10)
-    gsearch = GridSearchCV(
-        estimator=model, cv=tscv, param_grid=param_search, scoring=rmse_score
-    )
-    gsearch.fit(X_train, y_train)
-    best_score = gsearch.best_score_
-    best_model = gsearch.best_estimator_
-    y_true = y_test.values
-    y_pred = best_model.predict(X_test)
-    regression_evaluation_metircs(y_true, y_pred)
-    plot_preds(
-        available_bikes_df.index,
-        available_bikes_df["AVAILABLE BIKES"],
-        X_test.index,
-        y_test,
-        19,
-    )
 
     # _____
 
@@ -294,5 +319,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-# Idea -> weekday -> week -> day of the week-> time
