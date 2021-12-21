@@ -1,21 +1,16 @@
 import math
 from operator import index
-from matplotlib.style import available
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib.style import available
 from sklearn import metrics
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, Ridge, RidgeCV
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import (
-    GridSearchCV,
-    KFold,
-    TimeSeriesSplit,
-    cross_val_score,
-    train_test_split,
-)
+from sklearn.model_selection import (GridSearchCV, KFold, TimeSeriesSplit,
+                                     cross_val_score, train_test_split)
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
@@ -229,27 +224,30 @@ def featureImportance(df_station, time_sampling_interval_dt, lag_value):
         plt.show()
 
 
-def PolynomialOrderCrossValidation(XX, yy):
+def PolynomialOrderCrossValidation(XX_ridge, yy_ridge, XX_kNR, yy_kNR):
     mean_error_ridge = []
     std_error_ridge = []
     mean_error_kNNR = []
     std_error_kNNR = []
     scaler = StandardScaler()
-    XX_scaled = scaler.fit_transform(XX)
+    XX_scaled_ridge = scaler.fit_transform(XX_ridge)
+    XX_scaled_kNR = scaler.fit_transform(XX_kNR)
     q_range = [1, 2, 3, 4, 5]
     for q in q_range:
-        Xpoly = PolynomialFeatures(q).fit_transform(XX_scaled)
-
+        # Ridge
+        Xpoly_ridge = PolynomialFeatures(q).fit_transform(XX_scaled_ridge)
         model_ridge = Ridge()
         scores_ridge = cross_val_score(
-            model_ridge, Xpoly, yy, cv=10, scoring="neg_mean_squared_error"
+            model_ridge, Xpoly_ridge, yy_ridge, cv=10, scoring="neg_mean_squared_error"
         )
         mean_error_ridge.append(np.array(scores_ridge).mean())
         std_error_ridge.append(np.array(scores_ridge).std())
 
+        # KNeighborsRegressor
+        Xpoly_kNR = PolynomialFeatures(q).fit_transform(XX_scaled_kNR)
         model_kNNR = KNeighborsRegressor()
         scores_kNNR = cross_val_score(
-            model_kNNR, Xpoly, yy, cv=10, scoring="neg_mean_squared_error"
+            model_kNNR, Xpoly_kNR, yy_kNR, cv=10, scoring="neg_mean_squared_error"
         )
         mean_error_kNNR.append(np.array(scores_kNNR).mean())
         std_error_kNNR.append(np.array(scores_kNNR).std())
@@ -308,10 +306,57 @@ def RidgeAlphaValueCrossValidation(XX, yy):
     plt.show()
 
 
-def KNeighborsRegressor_k_value_CV(XX, yy):
+def RidgeAlphaValueCrossValidation_method1(XX, yy):
     mean_error = []
     std_error = []
-    num_neighbours = list(range(1, 50))
+    XX_local = XX.copy()
+    yy_local = yy.copy()
+    XX_local = XX_local.reset_index(drop=True)
+    yy_local = yy_local.reset_index(drop=True)
+    XX_local.index = XX_local.index.astype(int, copy=False)
+    yy_local.index = yy_local.index.astype(int, copy=False)
+    C_range = [
+        0.00001,
+        0.00005,
+        0.0001,
+        0.0005,
+        0.001,
+        0.005,
+        0.01,
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        10,
+        50,
+    ]
+    for C in C_range:
+        ridge_model = Ridge(alpha=1 / (2 * C))
+        temp = []
+        kf = KFold(n_splits=10)
+        for train, test in kf.split(XX_local):
+            ridge_model = Ridge(alpha=1 / (2 * C)).fit(
+                XX_local.iloc[train], yy_local.iloc[train]
+            )
+            ypred = ridge_model.predict(XX_local.iloc[test])
+            temp.append(mean_squared_error(yy_local.iloc[test], ypred))
+        mean_error.append(np.array(temp).mean())
+        std_error.append(np.array(temp).std())
+    plt.rc("font", size=18)
+    plt.rcParams["figure.constrained_layout.use"] = True
+    plt.errorbar(C_range, mean_error, yerr=std_error)
+    plt.xlabel("Ci")
+    plt.ylabel("Mean square error")
+    plt.title("Ridge Regression Cross Validation for a range of C")
+    # plt.xlim((0, 200))
+    plt.show()
+
+
+def KNeighborsRegressor_k_value_CV(XX, yy, num_neigbor_range):
+    mean_error = []
+    std_error = []
+    num_neighbours = list(range(1, num_neigbor_range))
     for k in num_neighbours:
         model = KNeighborsRegressor(n_neighbors=k, weights="uniform")
         scores = cross_val_score(model, XX, yy, cv=10, scoring="neg_mean_squared_error")
@@ -393,7 +438,9 @@ def exam_2021(df_station, station_id):
 
     # Plotting avaliable bikes vs time of our dataset
     plot_station_data(
-        df_total_station_data.index, df_total_station_data["AVAILABLE BIKES"], 19
+        df_total_station_data.index,
+        df_total_station_data["AVAILABLE BIKES"],
+        station_id,
     )
 
     # Setting the step sizes
@@ -410,6 +457,8 @@ def exam_2021(df_station, station_id):
     lagCrossValidation(
         df_station, time_sampling_interval_dt, df_total_station_data, station_id
     )
+
+    # lag_value_ridge is 4 and lag_value_kNNR is 2
     lag_value_ridge = int(
         input(
             "Please choose the desired 'lag' value for the Ridge Regression model:    "
@@ -426,13 +475,13 @@ def exam_2021(df_station, station_id):
 
     # Calculating features for step ahead predictions and extracting these features into seperate dataframes
     (
-        XX,
-        yy,
-        X_train,
-        y_train,
-        X_test,
-        y_test,
-        df_features_2_step_ahead,
+        XX_ridge,
+        yy_ridge,
+        X_train_ridge,
+        y_train_ridge,
+        X_test_ridge,
+        y_test_ridge,
+        df_features_2_step_ahead_ridge,
     ) = feature_engineering(
         df_station=df_station,
         lag=lag_value_ridge,
@@ -443,14 +492,113 @@ def exam_2021(df_station, station_id):
         weekly_features_flag=True,
     )
 
+    (
+        XX_kNR,
+        yy_kNR,
+        X_train_kNR,
+        y_train_kNR,
+        X_test_kNR,
+        y_test_kNR,
+        df_features_2_step_ahead_kNR,
+    ) = feature_engineering(
+        df_station=df_station,
+        lag=lag_value_kNNR,
+        q_step_size=2,
+        time_sampling_interval_dt=time_sampling_interval_dt,
+        short_term_features_flag=True,
+        daily_features_flag=True,
+        weekly_features_flag=True,
+    )
+
+    # Cross Validation
+    PolynomialOrderCrossValidation(XX_ridge, yy_ridge, XX_kNR, yy_kNR)
+    polynomial_order_ridge = int(
+        input("Please enter the polynomial order 'q' value for Ridge Regression :    ")
+    )
+    polynomial_order_kNR = int(
+        input(
+            "Please enter the polynomial order 'q' value for KNeighborsRegressor :    "
+        )
+    )
+
+    XX_poly_ridge = XX_ridge
+    XX_poly_kNR = XX_kNR
+    if polynomial_order_ridge > 1:
+        XX_poly_ridge = PolynomialFeatures(polynomial_order_ridge).fit_transform(
+            XX_poly_ridge
+        )
+        X_train_ridge = PolynomialFeatures(polynomial_order_ridge).fit_transform(
+            X_train_ridge
+        )
+        X_test_ridge = PolynomialFeatures(polynomial_order_ridge).fit_transform(
+            X_test_ridge
+        )
+
+    if polynomial_order_kNR > 1:
+        XX_poly_kNR = PolynomialFeatures(polynomial_order_kNR).fit_transform(
+            XX_poly_kNR
+        )
+        X_train_kNR = PolynomialFeatures(polynomial_order_ridge).fit_transform(
+            X_train_kNR
+        )
+        X_test_kNR = PolynomialFeatures(polynomial_order_ridge).fit_transform(
+            X_test_kNR
+        )
+
+    RidgeAlphaValueCrossValidation(XX_poly_ridge, yy_ridge)
+    RidgeAlphaValueCrossValidation_method1(XX_poly_ridge, yy_ridge)
+    C_value_ridge = float(
+        input("Please choose the desired 'C' value for the Ridge Regression model:    ")
+    )
+
+    KNeighborsRegressor_k_value_CV(XX_poly_ridge, yy_ridge, 100)
+    k_value = int(
+        input(
+            "Please enter the number of neighnours 'k' value for the KNeighborsRegressor model:    "
+        )
+    )
+
+    # -----------------------------------------Ridge Regression---------------------------------------
+    model_ridgeReg, scores_ridgeReg = ridgeRegression(
+        X_train_ridge, y_train_ridge, X_test_ridge, y_test_ridge, C_value_ridge
+    )
+    ypred_full_ridge = model_ridgeReg.predict(XX_poly_ridge)
+
+    print("Plotting Ridge Regression Predictions")
+    plot_preds(
+        df_total_station_data.index,
+        df_total_station_data["AVAILABLE BIKES"],
+        XX_poly_ridge.index,
+        ypred_full_ridge,
+        station_id,
+    )
+    print(scores_ridgeReg)
+
+    # -----------------------------------------KNeigborsRegressor---------------------------------------
+    model_kNR, scores_kNR = kNearestNeighborsRegression(
+        X_train_kNR, y_train_kNR, X_test_kNR, y_test_kNR, k_value
+    )
+    ypred_full_kNR = model_kNR.predict(XX_poly_kNR)
+
+    print("Plotting Ridge Regression Predictions")
+    plot_preds(
+        df_total_station_data.index,
+        df_total_station_data["AVAILABLE BIKES"],
+        XX_poly_kNR.index,
+        ypred_full_kNR,
+        station_id,
+    )
+    print(scores_kNR)
+
+    # ----------------------------------------------Baseline-------------------------------------------------
+    baselineModel(yy_ridge, station_id, 288)
+
 
 def main():
     df_dublin_bikes = pd.read_csv(DATASET_PATH)
     df_dublin_bikes["TIME"] = pd.to_datetime(df_dublin_bikes["TIME"])
     df_dublin_bikes.rename(columns={"STATION ID": "STATION_ID"}, inplace=True)
     for station_id in SELECTED_STATIONS:
-        # station_id = df_dublin_bikes.STATION_ID == station
-        # df_station = df_dublin_bikes[station_id]
         df_station = df_dublin_bikes.loc[df_dublin_bikes["STATION_ID"] == station_id]
         exam_2021(df_station, station_id)
         break

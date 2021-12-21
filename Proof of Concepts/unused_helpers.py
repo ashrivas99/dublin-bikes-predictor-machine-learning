@@ -37,13 +37,51 @@ def lagCrossValidation( y_available_bikes, time_full_days, time_sampling_interva
             plt.title(f"Lag Cross Validation Results,{q_value*(time_sampling_interval_dt/60)} minutes ahead Preidctions")
             plt.show()
 
+
+def RidgeAlphaValueCrossValidation(XX, yy):
+    mean_error = []
+    std_error = []
+    C_range = [
+        0.00001,
+        0.00005,
+        0.0001,
+        0.0005,
+        0.001,
+        0.005,
+        0.01,
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        10,
+        50,
+        100,
+        500,
+    ]
+    for C in C_range:
+        ridge_model = Ridge(alpha=1 / (2 * C))
+        scores = cross_val_score(
+            ridge_model, XX, yy, cv=10, scoring="neg_mean_squared_error"
+        )
+        mean_error.append(np.array(scores).mean())
+        std_error.append(np.array(scores).std())
+    plt.rc("font", size=18)
+    plt.rcParams["figure.constrained_layout.use"] = True
+    plt.errorbar(C_range, mean_error, yerr=std_error)
+    plt.xlabel("Ci")
+    plt.ylabel("Negative Mean square error")
+    plt.title("Ridge Regression Cross Validation for a range of C")
+    plt.show()
+
+
 # ___________________________Training Ridge Regression using k fold cross validation _________________________________________________________
 from matplotlib import pyplot as plt
 import numpy as np
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold, cross_val_score
-from dublin_bikes_predictor import KNeighborsRegressor_k_value_CV, feature_engineering, regression_evaluation_metircs
+from Backup.dublin_bikes_predictor import KNeighborsRegressor_k_value_CV, feature_engineering, regression_evaluation_metircs
 
 
 def ridgeRegression(XX, yy, train, test, C_value, time_preds_days, station_id ):
