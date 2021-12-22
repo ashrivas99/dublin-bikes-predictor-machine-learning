@@ -1,5 +1,6 @@
 import math
 from operator import index
+from turtle import color
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.svm import SVR
 
 DATASET_PATH = "Data/dublinbikes_20200101_20200401.csv"
-SELECTED_STATIONS = [19, 10, 96]
+SELECTED_STATIONS = [19, 10]
 
 
 def plot_station_data(time_full_days, y_available_bikes, station_id):
@@ -25,11 +26,17 @@ def plot_station_data(time_full_days, y_available_bikes, station_id):
     plt.rc("font", size=18)
     plt.rcParams["figure.constrained_layout.use"] = True
     plt.figure(figsize=(8, 8), dpi=80)
-    # plt.plot(time_full_days, y_available_bikes, '-o')
-    plt.scatter(time_full_days, y_available_bikes, color="red", marker=".")
+    c ='red'
+    if station_id == 10:
+        c = 'green'
+    elif station_id == 19:
+        c = 'blue'
+    # plt.plot(time_full_days, y_available_bikes, '-o', color=c)
+    plt.scatter(time_full_days, y_available_bikes, color=c, marker=".")
     plt.xlabel("Time (Days)")
     plt.ylabel(f"Available Bikes at Station {station_id}")
     plt.title(f"Available bikes vs Days for bike station {station_id}")
+    # plt.xlim(pd.to_datetime('2020-02-10'), pd.to_datetime('2020-02-19'))
     plt.show()
 
 
@@ -86,7 +93,7 @@ def feature_engineering(
 
     available_bikes_df.loc[:, f"bikes_avail_{q}_mins_ahead"] = available_bikes_df.loc[
         :, "AVAILABLE BIKES"
-    ].shift(-q_step_size)
+        ].shift(-q_step_size)
 
     if short_term_features_flag:
         for data_point in range(0, lag):
@@ -165,7 +172,7 @@ def lagCrossValidation(
                     q_step_size=q_value,
                     time_sampling_interval_dt=time_sampling_interval_dt,
                     short_term_features_flag=True,
-                    daily_features_flag=False,
+                    daily_features_flag=True,
                     weekly_features_flag=True,
                 )
                 scores = cross_val_score(
@@ -186,7 +193,7 @@ def lagCrossValidation(
             plt.show()
 
 
-def featureImportance(df_station, time_sampling_interval_dt, lag_value):
+def featureImportance(df_station, time_sampling_interval_dt, lag_value, df_total_station_data, station_id):
     test_model_ridge = Ridge(fit_intercept=False)
     step_size = [2, 6, 12]
     for q_value in step_size:
@@ -209,7 +216,7 @@ def featureImportance(df_station, time_sampling_interval_dt, lag_value):
             f"Best negative mse score using sklearn Ridge Cross Validation: {mean_squared_error(yy_CV, test_model_ridge.predict(XX_CV) )}"
         )
 
-        weights = test_model_ridge.coef_.reshape(lag_value * 3)
+        weights = test_model_ridge.coef_.reshape(lag_value*3)
         weights_with_labels = pd.Series(weights, index=X_train.columns.to_numpy())
         imp_weights_with_labels = weights_with_labels.sort_values()
 
@@ -222,6 +229,7 @@ def featureImportance(df_station, time_sampling_interval_dt, lag_value):
             f"Feature importance using Ridge Model. Predictions for {q_value*time_sampling_interval_dt/60} minutes ahead"
         )
         plt.show()
+        plot_preds(df_total_station_data.index, df_total_station_data['AVAILABLE BIKES'], XX_CV.index,  test_model_ridge.predict(XX_CV), station_id)
 
 
 def PolynomialOrderCrossValidation(XX_ridge, yy_ridge, XX_kNR, yy_kNR):
@@ -389,7 +397,6 @@ def kNearestNeighborsRegression(X_train, y_train, X_test, y_test, num_neighbors_
     return kNR_model, ridge_metrics_scores
 
 
-# Baseline model to predict same point as the last TODO
 def baselineModel(yy, station_id, pred_point_value):
     yy_baseline_true = yy.copy()
     yy_baseline_true = yy_baseline_true.drop(
@@ -474,15 +481,7 @@ def exam_2021(df_station, station_id):
     featureImportance(df_station, time_sampling_interval_dt, lag_value_ridge)
 
     # Calculating features for step ahead predictions and extracting these features into seperate dataframes
-    (
-        XX_ridge,
-        yy_ridge,
-        X_train_ridge,
-        y_train_ridge,
-        X_test_ridge,
-        y_test_ridge,
-        df_features_2_step_ahead_ridge,
-    ) = feature_engineering(
+    XX_ridge, yy_ridge, X_train_ridge,y_train_ridge,X_test_ridge,y_test_ridge,df_features_2_step_ahead_ridge= feature_engineering(
         df_station=df_station,
         lag=lag_value_ridge,
         q_step_size=2,
